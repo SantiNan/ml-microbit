@@ -1,29 +1,56 @@
+html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ML-micro:bit</title>
+    <title>Face Recognition micro:bit</title>
     <link rel="manifest" href="manifest.json">
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net"></script>
+    <script src="https://cdn.jsdelivr.net"></script>
+
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f4f9; }
+        .setup-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-block; margin-bottom: 20px; }
+        input { padding: 10px; width: 300px; border: 1px solid #ccc; border-radius: 5px; margin: 10px; }
+        #webcam-container { margin: 20px auto; border: 5px solid #333; width: 200px; height: 200px; display: none; }
+        #label-container { font-size: 20px; font-weight: bold; color: #007bff; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px; }
+        button:disabled { background: #ccc; }
+    </style>
 </head>
 <body>
-    <h1>ML-micro:bit</h1>
-    <button onclick="init()">Start App & Connect</button>
+    <h1>Micro:bit Face Link</h1>
+
+    <div class="setup-box" id="setup-ui">
+        <p>1. Paste your Teachable Machine URL:</p>
+        <input type="text" id="model-url" placeholder="https://teachablemachine.withgoogle.com..." />
+        <p>2. Connect your device:</p>
+        <button id="start-btn" onclick="init()">Connect micro:bit & Start</button>
+    </div>
     
     <div id="webcam-container"></div>
-    <div id="label-container">Waiting for detection...</div>
+    <div id="label-container"></div>
 
     <script>
-        const TM_MODEL_URL = "https://teachablemachine.withgoogle.com/models/V_wCbp0hf/"; 
         let model, webcam, uartCharacteristic;
-        
-        // NEW: Variable to store the last sent name
         let lastPrediction = "";
 
         async function init() {
+            const urlInput = document.getElementById("model-url").value.trim();
+            
+            // Validate URL
+            if (!urlInput.startsWith("https://teachablemachine.withgoogle.com")) {
+                alert("Please enter a valid Teachable Machine URL.");
+                return;
+            }
+
+            // Ensure URL ends with a slash
+            const TM_MODEL_URL = urlInput.endsWith("/") ? urlInput : urlInput + "/";
+
             try {
+                // Step 1: Bluetooth Connection
                 console.log("Requesting micro:bit...");
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
@@ -35,26 +62,33 @@
                 uartCharacteristic = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
                 
                 console.log("Bluetooth Connected!");
-                document.body.style.backgroundColor = "lightyellow"; 
-                startML(); 
+                
+                // Hide Setup UI and Show Webcam
+                document.getElementById("setup-ui").style.display = "none";
+                document.getElementById("webcam-container").style.display = "block";
+                
+                // Step 2: Start ML with user URL
+                startML(TM_MODEL_URL); 
             } catch (error) { 
-                console.error("Bluetooth failed:", error); 
-                alert("Connection failed.");
+                console.error("Setup failed:", error); 
+                alert("Connection failed. Check Bluetooth or URL.");
             }
         }
 
-        async function startML() {
-            console.log("Loading Model...");
-            model = await tmImage.load(TM_MODEL_URL + "model.json", TM_MODEL_URL + "metadata.json");
-
-            webcam = new tmImage.Webcam(200, 200, true); 
+        async function startML(modelUrl) {
+            console.log("Loading Model from: " + modelUrl);
             try {
+                model = await tmImage.load(modelUrl + "model.json", modelUrl + "metadata.json");
+                
+                webcam = new tmImage.Webcam(200, 200, true); 
                 await webcam.setup({ facingMode: "user" }); 
                 await webcam.play();
+                
                 document.getElementById("webcam-container").appendChild(webcam.canvas);
                 window.requestAnimationFrame(loop);
-            } catch (err) {
-                console.error("Webcam setup failed:", err);
+            } catch (e) {
+                alert("Could not load the model. Check if the URL is correct and public.");
+                location.reload();
             }
         }
 
@@ -67,16 +101,13 @@
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
             for (let i = 0; i < prediction.length; i++) {
-                // High confidence threshold
                 if (prediction[i].probability > 0.95) { 
                     const detectedName = prediction[i].className;
 
-                    // CHANGE: Only proceed if the detected name is DIFFERENT from the last one
+                    // Only send if the detected category changed
                     if (detectedName !== lastPrediction) {
-                        lastPrediction = detectedName; // Update the tracker
-                        
+                        lastPrediction = detectedName;
                         document.getElementById("label-container").innerText = "Detected: " + detectedName;
-                        console.log("New detection found. Sending: " + detectedName);
                         sendToMicrobit(detectedName);
                     }
                 }
@@ -89,18 +120,16 @@
                 const data = encoder.encode(name + "\n");
                 try {
                     await uartCharacteristic.writeValue(data);
+                    console.log("Sent: " + name);
                 } catch (e) {
-                    console.log("Error sending data:", e);
-                    // Reset lastPrediction on error to allow a retry on the next loop
-                    lastPrediction = ""; 
+                    console.log("Bluetooth Send Error:", e);
+                    lastPrediction = ""; // Reset to allow retry
                 }
             }
         }
 
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js');
-            });
+            navigator.serviceWorker.register('sw.js');
         }
     </script>
 </body>
