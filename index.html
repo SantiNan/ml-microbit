@@ -76,21 +76,23 @@ html
         }
 
         async function startML(modelUrl) {
-            console.log("Loading Model from: " + modelUrl);
-            try {
-                model = await tmImage.load(modelUrl + "model.json", modelUrl + "metadata.json");
-                
-                webcam = new tmImage.Webcam(200, 200, true); 
-                await webcam.setup({ facingMode: "user" }); 
-                await webcam.play();
-                
-                document.getElementById("webcam-container").appendChild(webcam.canvas);
-                window.requestAnimationFrame(loop);
-            } catch (e) {
-                alert("Could not load the model. Check if the URL is correct and public.");
-                location.reload();
-            }
-        }
+    try {
+        console.log("Loading model files...");
+        // This line fetches 'model.json' and 'metadata.json' from Google's servers
+        model = await tmImage.load(modelUrl + "model.json", modelUrl + "metadata.json");
+        
+        console.log("Model loaded! Setting up webcam...");
+        webcam = new tmImage.Webcam(200, 200, true); 
+        await webcam.setup({ facingMode: "user" }); 
+        await webcam.play();
+        
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
+        window.requestAnimationFrame(loop);
+    } catch (e) {
+        console.error("Detailed Error:", e);
+        alert("Error loading model. Make sure you used the 'Sharable Link' and NOT the browser address bar link.");
+    }
+}
 
         async function loop() {
             webcam.update();
