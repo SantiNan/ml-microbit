@@ -4,132 +4,102 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Face Recognition micro:bit</title>
-    <!-- Linking the manifest allows the browser to recognize this as an installable PWA -->
     <link rel="manifest" href="manifest.json">
-    
-    <!-- TensorFlow.js: The engine that runs the machine learning model in the browser -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-    <!-- Teachable Machine Library: A wrapper to make image classification easier -->
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
 </head>
 <body>
     <h1>Micro:bit Face Link</h1>
-    <!-- A user gesture (click) is REQUIRED by browsers to trigger Bluetooth scanning -->
     <button onclick="init()">Start App & Connect</button>
     
     <div id="webcam-container"></div>
-    <div id="label-container"></div>
+    <div id="label-container">Waiting for detection...</div>
 
     <script>
-        // Replace with your exported model URL from Teachable Machine
         const TM_MODEL_URL = "https://teachablemachine.withgoogle.com/models/V_wCbp0hf/"; 
         let model, webcam, uartCharacteristic;
+        
+        // NEW: Variable to store the last sent name
+        let lastPrediction = "";
 
-        /**
-         * Step 1: Initialize Bluetooth Connection
-         * Uses the Web Bluetooth API to find the micro:bit UART service.
-         */
         async function init() {
             try {
                 console.log("Requesting micro:bit...");
-                // Filter for micro:bit devices and request the specific UART Service UUID
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
                 });
 
-                // Connect to the Generic Attribute Profile (GATT) server
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-                
-                // Get the 'TX' characteristic to send data TO the micro:bit
                 uartCharacteristic = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
                 
                 console.log("Bluetooth Connected!");
-                document.body.style.backgroundColor = "lightyellow"; // Stage 1: Connected
-                startML(); // Start the camera after successful connection
+                document.body.style.backgroundColor = "lightyellow"; 
+                startML(); 
             } catch (error) { 
                 console.error("Bluetooth failed:", error); 
-                alert("Connection failed. Ensure Bluetooth is on and micro:bit is in pairing mode.");
+                alert("Connection failed.");
             }
         }
 
-        /**
-         * Step 2: Setup Machine Learning
-         * Loads the model files and initializes the webcam.
-         */
         async function startML() {
-    console.log("Loading Model...");
-    model = await tmImage.load(TM_MODEL_URL + "model.json", TM_MODEL_URL + "metadata.json");
+            console.log("Loading Model...");
+            model = await tmImage.load(TM_MODEL_URL + "model.json", TM_MODEL_URL + "metadata.json");
 
-    // Fix: Explicitly request the 'user' camera in the setup options
-    webcam = new tmImage.Webcam(200, 200, true); 
-    try {
-        // Force the front camera (user)
-        await webcam.setup({ facingMode: "user" }); 
-        await webcam.play();
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-        window.requestAnimationFrame(loop);
-    } catch (err) {
-        console.error("Webcam setup failed:", err);
-        alert("Camera could not start. Is another app using it?");
-    }
-}
-
-        /**
-         * Step 3: The Prediction Loop
-         * Runs continuously to check the webcam feed against the model.
-         */
-        async function loop() {
-            webcam.update(); // Update webcam frame
-            await predict();
-            window.requestAnimationFrame(loop); // Continue the loop
+            webcam = new tmImage.Webcam(200, 200, true); 
+            try {
+                await webcam.setup({ facingMode: "user" }); 
+                await webcam.play();
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                window.requestAnimationFrame(loop);
+            } catch (err) {
+                console.error("Webcam setup failed:", err);
+            }
         }
 
-        /**
-         * Step 4: Classification and Logic
-         * Interprets the probability of each class.
-         */
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
             for (let i = 0; i < prediction.length; i++) {
-                // If the model is more than 95% sure it sees a specific face
+                // High confidence threshold
                 if (prediction[i].probability > 0.95) { 
                     const detectedName = prediction[i].className;
-                    document.getElementById("label-container").innerText = "Detected: " + detectedName;
-                    sendToMicrobit(detectedName);
+
+                    // CHANGE: Only proceed if the detected name is DIFFERENT from the last one
+                    if (detectedName !== lastPrediction) {
+                        lastPrediction = detectedName; // Update the tracker
+                        
+                        document.getElementById("label-container").innerText = "Detected: " + detectedName;
+                        console.log("New detection found. Sending: " + detectedName);
+                        sendToMicrobit(detectedName);
+                    }
                 }
             }
         }
 
-        /**
-         * Step 5: Send Data via Bluetooth
-         * Converts the string name into a Byte array (UTF-8) for the micro:bit.
-         */
         async function sendToMicrobit(name) {
             if (uartCharacteristic) {
                 const encoder = new TextEncoder();
-                // Add a newline '\n' so the micro:bit knows the string has ended
                 const data = encoder.encode(name + "\n");
-                
-                // writeValue sends the data to the micro:bit's RX characteristic
                 try {
                     await uartCharacteristic.writeValue(data);
                 } catch (e) {
                     console.log("Error sending data:", e);
+                    // Reset lastPrediction on error to allow a retry on the next loop
+                    lastPrediction = ""; 
                 }
             }
         }
 
-        /**
-         * PWA Service Worker Registration
-         * This allows the app to be 'installed' on phones and work offline.
-         */
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker Registered'))
-                    .catch(err => console.log('Service Worker Failed', err));
+                navigator.serviceWorker.register('sw.js');
             });
         }
     </script>
