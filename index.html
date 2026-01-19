@@ -103,7 +103,7 @@ html
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
             for (let i = 0; i < prediction.length; i++) {
-                if (prediction[i].probability > 0.95) { 
+                if (prediction[i].probability > 0.90) { 
                     const detectedName = prediction[i].className;
 
                     // Only send if the detected category changed
