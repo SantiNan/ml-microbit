@@ -46,7 +46,7 @@
                 uartCharacteristic = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
                 
                 console.log("Bluetooth Connected!");
-                document.body.style.backgroundColor = "lightyellow"; // Stage 1: Connected
+                document.body.style.backgroundColor = "lightred"; // Stage 1: Connected
                 startML(); // Start the camera after successful connection
             } catch (error) { 
                 console.error("Bluetooth failed:", error); 
