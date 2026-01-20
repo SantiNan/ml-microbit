@@ -1,3 +1,4 @@
 self.addEventListener('fetch', (event) => {
-  // Caching logic can be added here for full offline support
+  // Esto permite que la app funcione como PWA
+  event.respondWith(fetch(event.request));
 });
