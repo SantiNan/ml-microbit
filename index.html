@@ -102,97 +102,129 @@
     <h1>Micro:bit Face Link</h1>
 
     <div class="setup-box" id="setup-ui">
-        <p>1. Paste your Teachable Machine URL:</p>
-        <input type="text" id="model-url" placeholder="https://teachablemachine.withgoogle.com..." />
-        <p>2. Connect your device:</p>
-        <button id="start-btn" onclick="init()">Connect micro:bit & Start</button>
-    </div>
+    <p>1. Selecciona el tipo de modelo:</p>
+    <select id="model-type" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 8px;">
+        <option value="image">Imagen (Webcam)</option>
+        <option value="pose">Postura (Cuerpo completo)</option>
+        <option value="audio">Sonido (Micrófono)</option>
+    </select>
+
+    <p>2. Pega tu URL de Teachable Machine:</p>
+    <input type="text" id="model-url" placeholder="https://teachablemachine.withgoogle.com..." />
+    
+    <p>3. Conectar dispositivo:</p>
+    <button id="start-btn" onclick="init()">Conectar micro:bit & Iniciar</button>
+</div>
     
     <div id="webcam-container"></div>
     <div id="label-container"></div>
 
     <script>
-        let model, webcam, uartCharacteristic;
-        let lastPrediction = "";
+let model, webcam, recognizer, uartCharacteristic;
+let lastPrediction = "";
+let modelType = "";
 
-        async function init() {
-            const urlInput = document.getElementById("model-url").value.trim();
-            
-            // Validate URL
-            if (!urlInput.startsWith("https://teachablemachine.withgoogle.com")) {
-                alert("Please enter a valid Teachable Machine URL.");
-                return;
-            }
+async function init() {
+    const urlInput = document.getElementById("model-url").value.trim();
+    modelType = document.getElementById("model-type").value;
+    
+    if (!urlInput.startsWith("https://teachablemachine.withgoogle.com")) {
+        alert("Por favor, ingresa una URL válida.");
+        return;
+    }
 
-            // Ensure URL ends with a slash
-            const TM_MODEL_URL = urlInput.endsWith("/") ? urlInput : urlInput + "/";
+    const TM_MODEL_URL = urlInput.endsWith("/") ? urlInput : urlInput + "/";
 
-            try {
-                // Step 1: Bluetooth Connection
-                console.log("Requesting micro:bit...");
-                const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
-                });
-
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-                uartCharacteristic = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
-                
-                console.log("Bluetooth Connected!");
-                
-                // Hide Setup UI and Show Webcam
-                document.getElementById("setup-ui").style.display = "none";
-                document.getElementById("webcam-container").style.display = "block";
-                
-                // Step 2: Start ML with user URL
-                startML(TM_MODEL_URL); 
-            } catch (error) { 
-                console.error("Setup failed:", error); 
-                alert("Connection failed. Check Bluetooth or URL.");
-            }
-        }
-
-        async function startML(modelUrl) {
     try {
-        console.log("Loading model files...");
-        // This line fetches 'model.json' and 'metadata.json' from Google's servers
-        model = await tmImage.load(modelUrl + "model.json", modelUrl + "metadata.json");
+        // Bluetooth
+        const device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+        });
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+        uartCharacteristic = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
         
-        console.log("Model loaded! Setting up webcam...");
-        webcam = new tmImage.Webcam(400, 400, true); 
-        await webcam.setup({ facingMode: "user" }); 
-        await webcam.play();
+        document.getElementById("setup-ui").style.display = "none";
         
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-        window.requestAnimationFrame(loop);
-    } catch (e) {
-        console.error("Detailed Error:", e);
-        alert("Error loading model. Make sure you used the 'Sharable Link' and NOT the browser address bar link.");
+        // Iniciar ML según el tipo
+        if (modelType === "audio") {
+            startAudioML(TM_MODEL_URL);
+        } else {
+            document.getElementById("webcam-container").style.display = "block";
+            startVisualML(TM_MODEL_URL, modelType); 
+        }
+    } catch (error) { 
+        console.error(error); 
+        alert("Error de conexión. Revisa el Bluetooth o la URL.");
     }
 }
 
-        async function loop() {
-            webcam.update();
-            await predict();
-            window.requestAnimationFrame(loop);
-        }
+// LÓGICA PARA IMAGEN Y POSTURA
+async function startVisualML(modelUrl, type) {
+    const modelJson = modelUrl + "model.json";
+    const metadataJson = modelUrl + "metadata.json";
 
-        async function predict() {
-            const prediction = await model.predict(webcam.canvas);
-            for (let i = 0; i < prediction.length; i++) {
-                if (prediction[i].probability > 0.90) { 
-                    const detectedName = prediction[i].className;
+    if (type === "image") {
+        model = await tmImage.load(modelJson, metadataJson);
+    } else {
+        model = await tmPose.load(modelJson, metadataJson);
+    }
 
-                    // Only send if the detected category changed
-                    if (detectedName !== lastPrediction) {
-                        lastPrediction = detectedName;
-                        document.getElementById("label-container").innerText = "Detected: " + detectedName;
-                        sendToMicrobit(detectedName);
-                    }
-                }
+    webcam = new (type === "image" ? tmImage.Webcam : tmPose.Webcam)(300, 300, true);
+    await webcam.setup();
+    await webcam.play();
+    document.getElementById("webcam-container").appendChild(webcam.canvas);
+    window.requestAnimationFrame(visualLoop);
+}
+
+async function visualLoop() {
+    webcam.update();
+    const prediction = await (modelType === "image" ? model.predict(webcam.canvas) : model.estimatePose(webcam.canvas).then(() => model.predict(webcam.canvas)));
+    processPredictions(prediction);
+    window.requestAnimationFrame(visualLoop);
+}
+
+// LÓGICA PARA AUDIO
+async function startAudioML(modelUrl) {
+    const checkpoint = modelUrl + "model.json";
+    const metadata = modelUrl + "metadata.json";
+
+    recognizer = speechCommands.create("BROWSER_FFT", undefined, checkpoint, metadata);
+    await recognizer.ensureModelLoaded();
+
+    recognizer.listen(result => {
+        const labels = recognizer.wordLabels();
+        const scores = result.scores;
+        let highestScore = 0;
+        let bestLabel = "";
+
+        for (let i = 0; i < labels.length; i++) {
+            if (scores[i] > highestScore) {
+                highestScore = scores[i];
+                bestLabel = labels[i];
             }
         }
+        
+        if (highestScore > 0.85 && bestLabel !== "Background Noise") {
+            processPredictions([{ className: bestLabel, probability: highestScore }]);
+        }
+    }, { probabilityThreshold: 0.75 });
+}
+
+// PROCESADOR UNIVERSAL PARA MICRO:BIT
+function processPredictions(predictions) {
+    for (let i = 0; i < predictions.length; i++) {
+        if (predictions[i].probability > 0.90) {
+            const detectedName = predictions[i].className;
+            if (detectedName !== lastPrediction) {
+                lastPrediction = detectedName;
+                document.getElementById("label-container").innerText = "Detectado: " + detectedName;
+                sendToMicrobit(detectedName);
+            }
+        }
+    }
+}
 
         async function sendToMicrobit(name) {
             if (uartCharacteristic) {
