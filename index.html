@@ -10,14 +10,93 @@
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f4f9; }
-        .setup-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-block; margin-bottom: 20px; }
-        input { padding: 10px; width: 300px; border: 1px solid #ccc; border-radius: 5px; margin: 10px; }
-        #webcam-container { margin: 20px auto; border: 5px solid #333; width: 400px; height: 400px; display: none; }
-        #label-container { font-size: 20px; font-weight: bold; color: #007bff; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px; }
-        button:disabled { background: #ccc; }
-    </style>
+    /* Reset básico para asegurar que todo use el 100% de la pantalla */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body { 
+        font-family: 'Segoe UI', Roboto, sans-serif; 
+        text-align: center; 
+        background-color: #f4f4f9; 
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh; /* Ocupa todo el alto de la pantalla */
+        padding: 20px;
+    }
+
+    h1 { 
+        font-size: 1.5rem; 
+        margin-bottom: 20px; 
+        color: #333;
+    }
+
+    .setup-box { 
+        background: white; 
+        padding: 20px; 
+        border-radius: 15px; 
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+        width: 100%;
+        max-width: 400px; /* No se estira demasiado en tablets */
+        margin-bottom: 20px; 
+    }
+
+    input { 
+        padding: 12px; 
+        width: 100%; /* Se adapta al ancho del contenedor */
+        border: 2px solid #ddd; 
+        border-radius: 8px; 
+        margin: 15px 0; 
+        font-size: 16px; /* Evita el zoom automático en iOS/Android */
+    }
+
+    /* Recuadro de la cámara mejorado */
+    #webcam-container { 
+        margin: 15px auto; 
+        border: 6px solid #333; 
+        border-radius: 20px;
+        width: 280px;  /* Tamaño ideal para la mayoría de móviles */
+        height: 280px; 
+        overflow: hidden;
+        background-color: #000;
+        display: none; 
+        box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+    }
+
+    #webcam-container canvas {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover;
+    }
+
+    #label-container { 
+        font-size: 22px; 
+        font-weight: bold; 
+        color: #007bff; 
+        margin-top: 15px;
+        min-height: 30px;
+    }
+
+    button { 
+        width: 100%;
+        padding: 15px; 
+        font-size: 18px; 
+        font-weight: bold;
+        cursor: pointer; 
+        background: #28a745; 
+        color: white; 
+        border: none; 
+        border-radius: 10px;
+        transition: transform 0.2s, background 0.2s;
+    }
+
+    button:active {
+        transform: scale(0.98); /* Efecto visual al tocar en el móvil */
+        background: #218838;
+    }
+
+    button:disabled { background: #ccc; }
+</style>
 </head>
 <body>
     <h1>Micro:bit Face Link</h1>
